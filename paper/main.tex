@@ -1,0 +1,83 @@
+\documentclass[UTF8,a4paper,10.5pt]{ctexart}
+
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs,multirow}
+\usepackage{graphicx,subcaption}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\newcommand{\method}{TCA-Bimanual}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Dsrc}{\mathcal{D}_{\mathrm{src}}}
+\newcommand{\Dpos}{\mathcal{D}_{+}}
+\newcommand{\Dneg}{\mathcal{D}_{-}}
+
+\title{\textbf{时序反事实增强：面向少样本双臂灵巧操作的协同敏感数据生成}\\
+\large Temporal Counterfactual Augmentation for Data-Efficient Bimanual Dexterous Manipulation}
+\author{作者姓名 \\ 上海交通大学\quad \texttt{email@example.com}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+双臂灵巧操作的策略学习依赖大量同步、物理可执行的机器人示范，而双臂遥操作成本高，少量示范又难以覆盖不同协同节奏与接触模式。现有数据增强方法主要改变物体位姿、视觉外观或整段轨迹速度，但较少显式建模左右臂之间的相对时序。本文提出\method{}，一种面向少样本双臂操作的时序反事实数据生成框架。给定一条成功示范，我们在保持单臂动作顺序与动作集合完整的条件下，对指定手臂在指定阶段插入等待，从而只改变双臂相对时序。通过仿真执行反事实轨迹并结合任务成功、稳定性与接触几何指标，框架定位协同敏感阶段，生成成功近邻样本和困难失败样本，并将其用于协同感知策略训练。我们在 DexMimicGen TwoArmThreading 及\todo{另外1--2个双臂任务}上验证方法，重点回答时序扰动是否揭示双臂协同因果性、反事实数据能否提高少样本策略性能，以及增益是否可迁移到真实机器人。\todo{用最终实验数据补充主要定量结果。}
+\end{abstract}
+
+\noindent\textbf{关键词：} 双臂灵巧操作；少样本模仿学习；数据增强；时序反事实；协同建模
+
+\vspace{0.5em}
+\noindent\textbf{当前版本说明：}本文档是一份可持续迭代的研究初稿。后缀延迟生成、物理执行、断点续跑和统计汇总已经实现；策略训练、第二任务和实机验证仍以红色 \textcolor{red}{TODO} 标记，避免将计划工作写成既成结果。
+
+\input{sections/01_introduction}
+\input{sections/02_related_work}
+\input{sections/03_method}
+\input{sections/04_experiments}
+\input{sections/05_conclusion}
+
+\bibliographystyle{unsrtnat}
+\bibliography{references}
+
+\appendix
+\section{实现与复现细节}
+\label{app:implementation}
+\begin{itemize}
+    \item 数据集：DexMimicGen TwoArmThreading，1025 条示范，共 218858 个时间步。
+    \item 控制频率：20 Hz；动作维度：右臂 7 维加左臂 7 维。
+    \item 稳定成功：轨迹结束后继续保持末端动作 $H$ 步，最后一帧仍满足任务成功条件。
+    \item 代码入口：\texttt{coordination\_pipeline.py}；统计入口：\texttt{analyze\_coordination\_results.py}。
+    \item \todo{补充随机种子、GPU、训练轮数、网络结构和超参数。}
+\end{itemize}
+
+\section{软件流程验证}
+\label{app:pipeline}
+
+为区分“研究结论”与“软件链路可运行”，表~\ref{tab:pipeline_check}记录投稿实验之前的工程验证。这里的数值只用于发现数据格式和训练接口错误，不参与方法有效性的论证。
+
+\begin{table}[h]
+\centering
+\caption{端到端软件流程验证。}
+\label{tab:pipeline_check}
+\begin{tabular}{lll}
+\toprule
+环节 & 验证内容 & 当前状态 \\
+\midrule
+完整数据 & 1025条轨迹、218858步、哈希与HDF5深检 & 通过 \\
+反事实执行 & 基线、逐臂后缀延迟、稳定保持与断点续跑 & 通过 \\
+结果分析 & 配对统计、Wilson置信区间、热图与LaTeX表格 & 通过 \\
+训练集导出 & states/actions/obs/next\_obs及干预元数据 & 通过 \\
+训练接口 & robomimic读取396步冒烟数据并完成2轮BC & 通过 \\
+策略效果 & 多数据规模、多随机种子和闭环成功率 & \todo{待完成} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Local environments and vendored dependencies
+.venv*/
+local_runs/.venv*/
+local_runs/dexmimicgen-src/
+
+# Datasets, checkpoints, and generated experiment outputs
+local_runs/datasets/
+local_runs/results/
+local_runs/configs/diagnostic_*.json
+local_runs/configs/formal_n5_*.json
+local_runs/configs/formal_n25_source_*.json
+local_runs/configs/image_bc_rnn_smoke.json
+*.hdf5
+*.h5
+*.pth
+*.pt
+*.ckpt
+*.jsonl
+*.mp4
+*.gif
+
+# Archives and downloaded reference material
+*.zip
+*.tar
+*.tar.gz
+papers/
+
+# Document / slide build products
+.codex-finalizer/
+.pptx-build/
+output/
+paper/*.aux
+paper/*.bbl
+paper/*.bcf
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
+paper/*.pdf
+paper/*.run.xml
+paper/*.synctex.gz
+paper/*.toc
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

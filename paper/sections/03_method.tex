@@ -1,0 +1,165 @@
+\section{方法}
+\label{sec:method}
+
+\subsection{问题定义}
+
+给定少量成功双臂示范集合 $\Dsrc=\{\tau_i\}_{i=1}^{N}$。第 $i$ 条示范表示为
+\begin{equation}
+\tau_i=\{(o_t,s_t,a_t^R,a_t^L)\}_{t=0}^{T_i-1},
+\end{equation}
+其中 $o_t$ 是视觉观测，$s_t$ 是机器人和任务状态，$a_t^R,a_t^L\in\R^{d}$ 分别是右臂和左臂动作。本文目标是在不额外采集大量真实示范的条件下，构造带物理执行标签的反事实集合 $\mathcal{D}_{\mathrm{cf}}$，并用其提高策略 $\pi_\theta$ 在初始状态变化和执行时序扰动下的任务成功率。
+
+\begin{table}[t]
+\centering
+\caption{主要符号。}
+\label{tab:notation}
+\begin{tabular}{cl}
+\toprule
+符号 & 含义 \\
+\midrule
+$\tau,T$ & 双臂示范及其原始长度 \\
+$e\in\{L,R\}$ & 被干预手臂 \\
+$s,\delta$ & 后缀延迟的起点和等待步数 \\
+$H$ & 轨迹结束后的稳定性检查步数 \\
+$y,y^{\mathrm{stable}}$ & 瞬时成功和保持后的稳定成功标签 \\
+$G_t$ & 时刻 $t$ 的关键接触图 \\
+$S(\tau,c)$ & 干预 $c=(e,s,\delta)$ 的协同敏感性 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{动作完整的后缀延迟}
+
+对被干预手臂 $e\in\{L,R\}$、干预起点 $s$ 和延迟步数 $\delta$，定义索引映射
+\begin{equation}
+g(t;s,\delta)=
+\begin{cases}
+t, & t<s,\\
+\varnothing, & s\le t<s+\delta,\\
+t-\delta, & t\ge s+\delta.
+\end{cases}
+\end{equation}
+当 $g=\varnothing$ 时，机械臂发送零位姿增量并保持最近的夹爪指令；否则执行原轨迹中索引为 $g$ 的动作。另一只手臂按原时钟执行，并在其轨迹结束后保持。所得轨迹长度为 $T+\delta$。等待动作不是简单复制上一帧 delta，而是将六维末端增量置零并维持最近夹爪指令，避免等待阶段继续累积位姿变化。
+
+该变换具有两个关键性质：
+\begin{enumerate}
+    \item \textbf{单臂保序：}被干预手臂的所有原动作以相同顺序出现；
+    \item \textbf{动作完整：}原动作不被删除或替换，变化主要来自插入等待造成的双臂相对相位偏移。
+\end{enumerate}
+
+\subsection{物理执行与协同敏感性}
+
+反事实轨迹在物理仿真器中从与源示范相同的初始状态执行，并重新采集实际观测 $o'_t$、状态 $s'_t$ 和接触信息，而不是沿用源轨迹观测。除任务成功 $y\in\{0,1\}$ 外，我们记录轨迹结束后保持 $H$ 步的稳定成功 $y^{\mathrm{stable}}$、最小任务距离 $d_{\min}$、最终任务距离 $d_{\mathrm{final}}$ 和接触统计。令 $G_t=(V,E_t)$ 表示关键实体之间的二值接触图，其中 $V$ 包含左右末端、操作物体和任务目标。对源示范 $\tau$ 的干预 $c=(e,s,\delta)$，定义示例敏感性分数
+\begin{equation}
+S(\tau,c)=
+\alpha\big(y_0^{\mathrm{stable}}-y_c^{\mathrm{stable}}\big)
++\beta\,\mathrm{clip}\left(\frac{d_{\mathrm{final}}^c-d_{\mathrm{final}}^0}{\sigma_d},-1,1\right)
++\gamma\,\Delta C,
+\end{equation}
+其中下标 $0$ 表示原轨迹，$\Delta C$ 表示两条轨迹对齐后接触边的平均汉明距离，$\alpha,\beta,\gamma$ 为权重。所有连续量仅使用训练集统计量归一化。主实验同时报告三个原始指标，避免结论只由复合分数驱动。
+
+\begin{algorithm}[t]
+\caption{协同敏感反事实数据生成}
+\label{alg:generation}
+\begin{algorithmic}[1]
+\Require 成功示范集 $\Dsrc$，手臂集合 $\{L,R\}$，起点集合 $\mathcal{S}$，延迟集合 $\Delta$，保持步数 $H$
+\Ensure 反事实集合 $\mathcal{D}_{\mathrm{cf}}$
+\State $\mathcal{D}_{\mathrm{cf}}\gets\varnothing$
+\ForAll{$\tau\in\Dsrc$}
+    \State 在仿真中重放 $\tau$，记录基线指标 $m_0$
+    \ForAll{$e\in\{L,R\},\ s\in\mathcal{S},\ \delta\in\Delta$}
+        \State $\tau'\gets\textsc{DelaySuffix}(\tau,e,s,\delta)$
+        \State 从相同初始状态执行 $\tau'$，结束后保持 $H$ 步
+        \State 记录稳定成功、任务距离和接触指标 $m_c$
+        \State 计算敏感性 $S(\tau,c)$
+        \State $\mathcal{D}_{\mathrm{cf}}\gets\mathcal{D}_{\mathrm{cf}}\cup\{(\tau',m_c,S,c)\}$
+    \EndFor
+\EndFor
+\State \Return $\mathcal{D}_{\mathrm{cf}}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{反事实样本选择}
+
+我们将反事实划分为三类：稳定成功的\emph{正样本}、接近成功边界的\emph{困难样本}，以及明显不可行的\emph{无效样本}。正样本扩展可执行轨迹分布；困难失败样本提供协同边界监督；明显不可行样本可能导致训练被简单负样本主导，因此不直接加入策略动作监督。
+
+具体地，使用阈值 $\eta_{-}$ 定义
+\begin{equation}
+\Dpos=\{\tau'\mid y^{\mathrm{stable}}=1\},\qquad
+\Dneg=\{\tau'\mid y^{\mathrm{stable}}=0,\ d_{\min}<\eta_{-}\}.
+\end{equation}
+为避免单一轨迹产生过多高度相关样本，每条源示范、每个阶段和每只手臂最多选取 $K$ 个反事实，并在延迟强度上分层采样。
+
+\subsection{协同感知策略训练}
+
+基础策略可以采用 ACT、BC-RNN 或 Diffusion Policy。对于原始示范和稳定成功反事实，我们使用标准行为克隆损失
+\begin{equation}
+\mathcal{L}_{\mathrm{BC}}=
+\mathbb{E}_{(o,a)\sim\Dsrc\cup\Dpos}
+\left[\ell\big(\pi_\theta(o),a\big)\right].
+\end{equation}
+
+进一步引入协同判别头 $q_\phi$，预测一个动作片段在当前观测下是否保持双臂协同：
+\begin{equation}
+\mathcal{L}_{\mathrm{coord}}=
+-\mathbb{E}_{\Dpos}\log q_\phi(o,a^{L},a^{R})
+-\mathbb{E}_{\Dneg}\log\big(1-q_\phi(o,a^{L},a^{R})\big).
+\end{equation}
+总目标为
+\begin{equation}
+\mathcal{L}=\mathcal{L}_{\mathrm{BC}}+\lambda_{c}\mathcal{L}_{\mathrm{coord}}.
+\end{equation}
+推理时可仅使用策略头，或用 $q_\phi$ 对候选动作块重排序。\todo{先实现“仅训练期辅助损失”版本，避免增加实机推理开销；再把重排序作为消融。}
+
+\begin{algorithm}[t]
+\caption{协同感知策略训练}
+\label{alg:training}
+\begin{algorithmic}[1]
+\Require 源示范 $\Dsrc$，成功反事实 $\Dpos$，困难失败 $\Dneg$
+\Ensure 策略 $\pi_\theta$ 与协同判别头 $q_\phi$
+\For{$k=1,\ldots,K$}
+    \State 从 $\Dsrc\cup\Dpos$ 采样成功动作片段批次 $B_{+}$
+    \State 从 $\Dneg$ 采样与 $B_{+}$ 在任务阶段和延迟强度上匹配的批次 $B_{-}$
+    \State 在 $B_{+}$ 上计算动作预测损失 $\mathcal{L}_{\mathrm{BC}}$
+    \State 在 $B_{+}\cup B_{-}$ 上计算 $\mathcal{L}_{\mathrm{coord}}$
+    \State 更新 $(\theta,\phi)$ 以最小化 $\mathcal{L}_{\mathrm{BC}}+\lambda_c\mathcal{L}_{\mathrm{coord}}$
+\EndFor
+\State \Return $\pi_\theta,q_\phi$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{方法整体流程}
+
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+    node distance=7mm and 7mm,
+    box/.style={draw,rounded corners=2pt,minimum width=2.55cm,minimum height=1.05cm,align=center,font=\small},
+    data/.style={box,fill=blue!10,draw=blue!60},
+    intervention/.style={box,fill=orange!14,draw=orange!75!black},
+    physical/.style={box,fill=purple!10,draw=purple!60},
+    positive/.style={box,fill=green!12,draw=green!55!black},
+    negative/.style={box,fill=red!10,draw=red!55!black},
+    train/.style={box,fill=gray!12,draw=black!65},
+    arrow/.style={-{Latex[length=2.2mm]},thick}
+]
+\node[data] (demo) {少量成功示范\\$\Dsrc$};
+\node[intervention,right=of demo] (split) {逐臂动作流\\$a^L_{0:T},a^R_{0:T}$};
+\node[intervention,right=of split] (delay) {保序后缀延迟\\$(e,s,\delta)$};
+\node[physical,right=of delay] (sim) {物理仿真执行\\重采集状态与接触};
+\node[positive,above right=4mm and 7mm of sim] (pos) {稳定成功\\$\Dpos$};
+\node[negative,below right=4mm and 7mm of sim] (neg) {近边界失败\\$\Dneg$};
+\node[train,right=19mm of sim] (policy) {策略学习\\$\mathcal{L}_{\mathrm{BC}}+\lambda_c\mathcal{L}_{\mathrm{coord}}$};
+\node[train,right=of policy] (eval) {未见初始状态\\时序扰动/实机验证};
+\draw[arrow] (demo) -- (split);
+\draw[arrow] (split) -- (delay);
+\draw[arrow] (delay) -- (sim);
+\draw[arrow] (sim) -- (pos);
+\draw[arrow] (sim) -- (neg);
+\draw[arrow] (pos) -- (policy);
+\draw[arrow] (neg) -- (policy);
+\draw[arrow] (policy) -- (eval);
+\end{tikzpicture}
+\caption{\method{}整体框架。蓝色表示源数据，橙色表示时序干预，紫色表示物理执行，绿色和红色分别表示稳定成功与近边界失败反事实。}
+\label{fig:overview}
+\end{figure*}
